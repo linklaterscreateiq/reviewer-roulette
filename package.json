@@ -1,0 +1,29 @@
+{
+  "name": "@createiq/reviewer-roulette",
+  "version": "1.0.4",
+  "description": "Randomly select reviewers for your merge request from a configuration file with Slack integration for holiday detection",
+  "main": "./dist/roulette.js",
+  "bin": {
+    "reviewer-roulette": "./dist/roulette.js"
+  },
+  "scripts": {
+    "tsc": "tsc -p tsconfig.json",
+    "bundle": "tsup",
+    "upload": "npm run bundle && npm publish --access public"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [],
+  "author": "Linklaters CreateiQ",
+  "license": "MIT",
+  "dependencies": {
+    "@slack/web-api": "7.0.2",
+    "https-proxy-agent": "7.0.4",
+    "ts-node": "10.9.2",
+    "typescript": "5.3.3"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.2"
+  }
+}

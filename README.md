@@ -1,2 +1,2 @@
-# reviewer-roulette
-Randomly select reviewers for your merge request from a configuration file with Slack integration for holiday detection
+# Reviewer Roulette
+Randomly select reviewers for your GitLab merge request from a configuration file with Slack integration for holiday detection
