@@ -7,6 +7,7 @@
     "reviewer-roulette": "./dist/roulette.js"
   },
   "scripts": {
+    "build": "npm run tsc",
     "tsc": "tsc -p tsconfig.json",
     "bundle": "tsup",
     "upload": "npm run bundle && npm publish --access public"
