@@ -19,7 +19,7 @@
   "author": "Linklaters CreateiQ",
   "license": "MIT",
   "dependencies": {
-    "@slack/web-api": "7.0.2",
+    "@slack/web-api": "7.0.4",
     "https-proxy-agent": "7.0.4",
     "ts-node": "10.9.2",
     "typescript": "5.3.3"
