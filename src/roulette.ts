@@ -49,19 +49,19 @@ const filterReviewersBasedOnSlackHoliday = (reviewers: Reviewer[], slackUsers: M
         return slackUser.id && reviewers.map(reviewer => reviewer.slackUserId).includes(slackUser.id)
     })
 
-    const slackUserIdsOnHoliday = slackUsersFilteredToReviewers
+    const slackUserIdsOnHolidayOrSick = slackUsersFilteredToReviewers
         .filter(
-            slackUser => slackUser.profile?.status_emoji == ':palm_tree:' || slackUser.profile?.status_emoji == ':holiday:'
+            slackUser => slackUser.profile?.status_emoji == ':palm_tree:' || slackUser.profile?.status_emoji == ':holiday:' || slackUser.profile?.status_emoji == ':face_with_thermometer'
         )
         .map(slackUser => slackUser.id)
 
     // Remove anyone with the holiday emoji in Slack
     const reviewersWithoutAuthorAndPeopleOnHoliday = reviewers.filter(
-        reviewer => !slackUserIdsOnHoliday.includes(reviewer.slackUserId)
+        reviewer => !slackUserIdsOnHolidayOrSick.includes(reviewer.slackUserId)
     )
 
     console.log(
-        `Eligible reviewers after removing holiday and author and filtering by chance: ${JSON.stringify(
+        `Eligible reviewers after removing holiday/sick, author and filtering by chance: ${JSON.stringify(
             reviewersWithoutAuthorAndPeopleOnHoliday.map(reviewer => reviewer.name)
         )}`
     )
@@ -140,7 +140,7 @@ const runReviewRoulette = async () => {
 
 To spread load more evenly across eligible reviewers and to enable speedy review the Roulette Bot has randomly selected two reviewers for this MR.
 
-You can make different choices if you think someone else would be better-suited or if someone is on holiday (the bot checks for the :palm_tree: emoji on Slack). Other people are free to review if they'd like to as well. 
+You can make different choices if you think someone else would be better-suited or if someone is on holiday (the bot checks for the :palm_tree: and :face_with_thermometer: emojis on Slack). Other people are free to review if they'd like to as well. 
 
 Once you've decided who will review this merge request **please assign them as a reviewer!** Roulette Bot does not do this automatically.
 
