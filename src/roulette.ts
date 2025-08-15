@@ -171,12 +171,30 @@ How do I review / What do I do if I've been named as a reviewer? An official gui
         id: string
     }
 
-    const existingMRNotes: NotesResponse = await (
-        await fetch(`${gitlabApiUrl}/api/v4/projects/${ciProjectId}/merge_requests/${ciMergeRequestIId}/notes?sort=asc`, {
-            headers: gitlabAuthHeaders,
-            method: 'GET',
-        })
-    ).json()
+    const notesResponse = await fetch(`${gitlabApiUrl}/api/v4/projects/${ciProjectId}/merge_requests/${ciMergeRequestIId}/notes?sort=asc`, {
+        headers: gitlabAuthHeaders,
+        method: 'GET',
+    })
+
+    if (!notesResponse.ok) {
+        console.error(`GitLab API error: ${notesResponse.status} ${notesResponse.statusText}`)
+        if (notesResponse.status === 401) {
+            console.error('Authentication failed. Check PROJECT_REVIEWER_BOT_PAT token.')
+        } else if (notesResponse.status === 403) {
+            console.error('Permission denied. Bot needs Developer/Maintainer access to this project.')
+        } else if (notesResponse.status === 404) {
+            console.error('Project or merge request not found. Check CI_PROJECT_ID and CI_MERGE_REQUEST_IID.')
+        }
+        process.exit(1)
+    }
+
+    const existingMRNotes = await notesResponse.json()
+
+    if (!Array.isArray(existingMRNotes)) {
+        console.error('GitLab API returned unexpected response:', JSON.stringify(existingMRNotes))
+        console.error('Expected an array of notes but received:', typeof existingMRNotes)
+        process.exit(1)
+    }
 
     const previousNote: NoteResponse | undefined = existingMRNotes.find(
         item => item.author.username === config.usernameOfBot
