@@ -1,6 +1,6 @@
 {
   "name": "@createiq/reviewer-roulette",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Randomly select reviewers for your merge request from a configuration file with Slack integration for holiday detection",
   "main": "./dist/roulette.js",
   "bin": {
