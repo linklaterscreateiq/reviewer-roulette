@@ -51,7 +51,11 @@ const filterReviewersBasedOnSlackHoliday = (reviewers: Reviewer[], slackUsers: M
 
     const slackUserIdsOnHolidayOrSick = slackUsersFilteredToReviewers
         .filter(
-            slackUser => slackUser.profile?.status_emoji == ':palm_tree:' || slackUser.profile?.status_emoji == ':holiday:' || slackUser.profile?.status_emoji == ':face_with_thermometer'
+            slackUser =>
+                slackUser.profile?.status_emoji == ':palm_tree:' ||
+                slackUser.profile?.status_emoji == ':holiday:' ||
+                slackUser.profile?.status_emoji == ':face_with_thermometer:' ||
+                slackUser.profile?.status_emoji == ':hospital:'
         )
         .map(slackUser => slackUser.id)
 
@@ -140,7 +144,7 @@ const runReviewRoulette = async () => {
 
 To spread load more evenly across eligible reviewers and to enable speedy review the Roulette Bot has randomly selected two reviewers for this MR.
 
-You can make different choices if you think someone else would be better-suited or if someone is on holiday (the bot checks for the :palm_tree: and :face_with_thermometer: emojis on Slack). Other people are free to review if they'd like to as well. 
+You can make different choices if you think someone else would be better-suited or if someone is on holiday (the bot checks for the :palm_tree:, :face_with_thermometer: and :hospital: emojis on Slack). Other people are free to review if they'd like to as well. 
 
 Once you've decided who will review this merge request **please assign them as a reviewer!** Roulette Bot does not do this automatically.
 
