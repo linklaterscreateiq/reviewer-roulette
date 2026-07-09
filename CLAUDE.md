@@ -26,7 +26,7 @@ External integrations are the Slack Web API (`@slack/web-api`) for status/holida
 
 ## Build, Run and Test
 
-- `npm run build` / `npm run tsc` — runs `tsc -p tsconfig.json`. This is effectively a **type-check**; note `tsconfig.json` sets no `outDir`, so any emitted JS lands next to the source. It is *not* what gets published.
+- `npm run build` / `npm run tsc` — runs `tsc -p tsconfig.json`. This is a pure **type-check**: `tsconfig.json` sets `noEmit`, so it produces no output files (leave it that way — without it, `tsc` sprays compiled JS next to the source, and nothing here is gitignored except `dist`). It is *not* what gets published.
 - `npm run bundle` — runs `tsup`, producing the real artifact: a minified CommonJS bundle at `dist/roulette.js`. This is what `bin`/`main` point to and what consumers actually execute.
 - `npm run upload` — bundles then `npm publish --access public`. Requires npm auth. Bump `version` in `package.json` first (see `PUBLISHING.md`).
 
