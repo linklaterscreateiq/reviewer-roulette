@@ -24,7 +24,57 @@ type Reviewer = {
 
 type ReviewerData = {
     reviewers: Reviewer[]
+    awayEmojis?: string[]
 }
+
+// Slack's own "Out of Office" emoji category, as the client shows it. It has to be copied here:
+// `emoji.list?include_categories=true` returns only the nine Unicode groups, and these arrive as
+// ordinary workspace custom emoji, so nothing in the API distinguishes them from any other.
+const slackOutOfOfficeEmojis = [
+    'at-the-beach',
+    'catching-up',
+    'computer-sleep',
+    'out-of-office',
+    'pto-soon',
+    'relaxing',
+    'sleeping-potato',
+    'touch-grass',
+    'travel-time',
+]
+
+// Away statuses from Slack's "Hybrid Work" and "Remote Work" categories. Both categories are mostly
+// still-working statuses (`working-from-home`, `hot-desking`, `here`), so only these four count.
+const slackAwayWorkEmojis = ['ooo', 'pto', 'self-care', 'away']
+
+// Statuses that predate the categories and are still in use. `:no_entry:` is what Slack's built-in
+// out-of-office status sets, including when it is synced from Google or Outlook Calendar.
+const defaultAwayEmojis = [
+    ...slackOutOfOfficeEmojis,
+    ...slackAwayWorkEmojis,
+    'palm_tree',
+    'holiday',
+    'desert_island',
+    'face_with_thermometer',
+    'hospital',
+    'no_entry',
+]
+
+// Slack accepts a status emoji with or without colons, and appends a skin tone as a second
+// `::`-delimited name, so both config and profile values are reduced to a bare name before matching.
+const normaliseEmojiName = (emoji: string) => emoji.trim().toLowerCase().replace(/^:|:$/g, '').split('::')[0]
+
+// A workspace alias resolves to a different name than the one on the profile, so every name Slack
+// reports for the status counts as a candidate.
+const emojiNamesForStatus = (slackUser: Member) =>
+    [
+        slackUser.profile?.status_emoji,
+        ...(slackUser.profile?.status_emoji_display_info ?? []).flatMap(info => [
+            info.emoji_name,
+            info.display_alias,
+        ]),
+    ]
+        .filter((name): name is string => !!name)
+        .map(normaliseEmojiName)
 
 // Config
 const config = {
@@ -47,33 +97,27 @@ const getAllSlackUsers = async () => {
     return slackListUsers.members!
 }
 
-const filterReviewersBasedOnSlackHoliday = (reviewers: Reviewer[], slackUsers: Member[]) => {
+const filterReviewersWhoAreAway = (reviewers: Reviewer[], slackUsers: Member[], awayEmojis: Set<string>) => {
     const slackUsersFilteredToReviewers = slackUsers.filter(slackUser => {
         return slackUser.id && reviewers.map(reviewer => reviewer.slackUserId).includes(slackUser.id)
     })
 
-    const slackUserIdsOnHolidayOrSick = slackUsersFilteredToReviewers
-        .filter(
-            slackUser =>
-                slackUser.profile?.status_emoji == ':palm_tree:' ||
-                slackUser.profile?.status_emoji == ':holiday:' ||
-                slackUser.profile?.status_emoji == ':face_with_thermometer:' ||
-                slackUser.profile?.status_emoji == ':hospital:'
-        )
+    const slackUserIdsWhoAreAway = slackUsersFilteredToReviewers
+        .filter(slackUser => emojiNamesForStatus(slackUser).some(name => awayEmojis.has(name)))
         .map(slackUser => slackUser.id)
 
-    // Remove anyone with the holiday emoji in Slack
-    const reviewersWithoutAuthorAndPeopleOnHoliday = reviewers.filter(
-        reviewer => !slackUserIdsOnHolidayOrSick.includes(reviewer.slackUserId)
+    // Remove anyone whose Slack status marks them as away
+    const reviewersWithoutAuthorAndPeopleAway = reviewers.filter(
+        reviewer => !slackUserIdsWhoAreAway.includes(reviewer.slackUserId)
     )
 
     console.log(
-        `Eligible reviewers after removing holiday/sick, author and filtering by chance: ${JSON.stringify(
-            reviewersWithoutAuthorAndPeopleOnHoliday.map(reviewer => reviewer.name)
+        `Eligible reviewers after removing away, author and filtering by chance: ${JSON.stringify(
+            reviewersWithoutAuthorAndPeopleAway.map(reviewer => reviewer.name)
         )}`
     )
 
-    return reviewersWithoutAuthorAndPeopleOnHoliday
+    return reviewersWithoutAuthorAndPeopleAway
 }
 
 const selectReviewersBasedOnChance = (reviewers: Reviewer[]) => {
@@ -124,15 +168,20 @@ const runReviewRoulette = async () => {
 
     const reviewersSelectedBasedOnChance = selectReviewersBasedOnChance(reviewersWithoutAuthor)
 
-    const reviewersWithoutAuthorAndPeopleOnHoliday = filterReviewersBasedOnSlackHoliday(
+    const awayEmojis = new Set((reviewerData.awayEmojis ?? defaultAwayEmojis).map(normaliseEmojiName))
+
+    console.log(`Away emojis: ${JSON.stringify([...awayEmojis])}`)
+
+    const reviewersWithoutAuthorAndPeopleAway = filterReviewersWhoAreAway(
         reviewersSelectedBasedOnChance,
-        slackMembers
+        slackMembers,
+        awayEmojis
     )
 
     // Don't include the pipeline/MR creator in the list of possible reviewers
-    const maintainers = reviewersWithoutAuthorAndPeopleOnHoliday.filter(item => item.roles.includes('maintainer'))
+    const maintainers = reviewersWithoutAuthorAndPeopleAway.filter(item => item.roles.includes('maintainer'))
 
-    const allDevelopers = reviewersWithoutAuthorAndPeopleOnHoliday
+    const allDevelopers = reviewersWithoutAuthorAndPeopleAway
 
     const randomMaintainer = getRandomReviewer(maintainers)
 
@@ -142,12 +191,17 @@ const runReviewRoulette = async () => {
     console.log(`Rand Maintainer = ${JSON.stringify(randomMaintainer)}`)
     console.log(`Rand All Dev = ${JSON.stringify(randomAllDeveloper)}`)
 
+    // The away set is mostly Slack custom emoji, which GitLab renders as literal `:name:` text, so
+    // the comment describes the rule rather than listing them.
+    const awayEmojiSentence =
+        awayEmojis.size > 0 ? ' (the bot skips anyone whose Slack status marks them as out of office)' : ''
+
     const gitlabCommentBody = `
 ## :wheel_of_dharma: Reviewer Roulette
 
 To spread load more evenly across eligible reviewers and to enable speedy review the Roulette Bot has randomly selected two reviewers for this MR.
 
-You can make different choices if you think someone else would be better-suited or if someone is on holiday (the bot checks for the :palm_tree:, :face_with_thermometer: and :hospital: emojis on Slack). Other people are free to review if they'd like to as well. 
+You can make different choices if you think someone else would be better-suited or if someone is away${awayEmojiSentence}. Other people are free to review if they'd like to as well.
 
 Once you've decided who will review this merge request **please assign them as a reviewer!** Roulette Bot does not do this automatically.
 
