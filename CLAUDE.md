@@ -32,6 +32,8 @@ External integrations are the Slack Web API (`@slack/web-api`) for status/holida
 
 - `npm run smoke` — bundles, then runs `scripts/smoke-test.mjs`: it executes `dist/roulette.js` against stub Slack and GitLab servers on loopback and asserts on the comment it posts (author excluded, holiday reviewers excluded, one maintainer plus one other developer named) and on the create/no-op/replace behaviour for an existing note. No credentials or network access needed. Because it drives the bundle over real HTTP, it catches runtime breakage from dependency bumps that `tsc` passes clean.
 
+`@types/node` is a direct devDependency and `tsconfig.json` names it in `types` — neither is redundant. TypeScript 7 does not pull `@types` packages in automatically here, so dropping either turns every use of `process` into "Cannot find name". Keep its major aligned with the Node in `mise.toml`, so the type-checker cannot offer APIs the pinned runtime lacks.
+
 There is **no unit-test framework and no linter** configured — don't go looking for one or assume a `test`/`lint` script exists. Verification before publishing is `npm run tsc` (type-check) plus `npm run smoke`. CI (`.github/workflows/build-node.yml`) runs all three on the Node version in `mise.toml` (currently 24), installed there by `mise-action` so the version is declared in one place only.
 
 Merging to `main` needs a pull request with a passing `build` check and one approving review, all enforced by repository rulesets. Dependency bumps are merged by hand; the point of the smoke test is that a green Build is enough to judge one on, without running the tool against real Slack and GitLab first.
