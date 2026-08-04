@@ -32,6 +32,8 @@ External integrations are the Slack Web API (`@slack/web-api`) for status/holida
 
 - `npm run smoke` — bundles, then runs `scripts/smoke-test.mjs`: it executes `dist/roulette.js` against stub Slack and GitLab servers on loopback and asserts on the comment it posts (author excluded, holiday reviewers excluded, one maintainer plus one other developer named) and on the create/no-op/replace behaviour for an existing note. No credentials or network access needed. Because it drives the bundle over real HTTP, it catches runtime breakage from dependency bumps that `tsc` passes clean.
 
+- `node scripts/proxy-check.mjs` — checks `HTTPS_PROXY` is honoured, by running the bundle twice: with the proxy pointed at a dead port it must fail to reach the stubbed Slack, and with no proxy set it must reach it. Both runs matter — a client that is simply broken would also fail the first one. Takes about fifteen seconds, because the Slack client retries a refused connection for a long time.
+
 `@types/node` is a direct devDependency and `tsconfig.json` names it in `types` — neither is redundant. TypeScript 7 does not pull `@types` packages in automatically here, so dropping either turns every use of `process` into "Cannot find name". Keep its major aligned with the Node in `mise.toml`, so the type-checker cannot offer APIs the pinned runtime lacks.
 
 There is **no unit-test framework and no linter** configured — don't go looking for one or assume a `test`/`lint` script exists. Verification before publishing is `npm run tsc` (type-check) plus `npm run smoke`. CI (`.github/workflows/build-node.yml`) runs all three on the Node version in `mise.toml` (currently 24), installed there by `mise-action` so the version is declared in one place only.
@@ -45,7 +47,7 @@ The script reads everything from the environment and will throw on missing requi
 - `REVIEWER_BOT_USERNAME` — GitLab username the bot's comments are authored as (used to find the existing note)
 - `REVIEWER_BOT_SLACK_TOKEN` — Slack API token for `users.list`
 - `PROJECT_REVIEWER_BOT_PAT` — GitLab PAT sent as the `PRIVATE-TOKEN` header
-- `HTTPS_PROXY` — optional; wraps the Slack client in an `HttpsProxyAgent`
+- `HTTPS_PROXY` — optional; routes the Slack client's requests through an undici `ProxyAgent`
 
 Supplied automatically by GitLab CI:
 - `GITLAB_USER_ID` — author of the MR/pipeline (excluded from selection)

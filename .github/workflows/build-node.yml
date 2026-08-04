@@ -35,3 +35,5 @@ jobs:
       run: npm run bundle
     - name: Smoke test
       run: node scripts/smoke-test.mjs
+    - name: Proxy check
+      run: node scripts/proxy-check.mjs
