@@ -36,7 +36,10 @@ const config = {
 
 const getAllSlackUsers = async () => {
     const maybeHttpsProxy = process.env.HTTPS_PROXY
-    const clientOpts: WebClientOptions = maybeHttpsProxy ? { agent: new HttpsProxyAgent(maybeHttpsProxy) } : {}
+    const clientOpts: WebClientOptions = {
+        ...(maybeHttpsProxy ? { agent: new HttpsProxyAgent(maybeHttpsProxy) } : {}),
+        ...(process.env.SLACK_API_URL ? { slackApiUrl: process.env.SLACK_API_URL } : {}),
+    }
 
     const slackClient = new WebClient(config.slackToken, clientOpts)
     const slackListUsers: UsersListResponse = await slackClient.users.list({})

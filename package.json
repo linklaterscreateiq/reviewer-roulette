@@ -10,6 +10,7 @@
     "build": "npm run tsc",
     "tsc": "tsc -p tsconfig.json",
     "bundle": "tsup",
+    "smoke": "npm run bundle && node scripts/smoke-test.mjs",
     "upload": "npm run bundle && npm publish --access public"
   },
   "files": [
