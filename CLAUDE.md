@@ -30,7 +30,11 @@ External integrations are the Slack Web API (`@slack/web-api`) for status/holida
 - `npm run bundle` — runs `tsup`, producing the real artifact: a minified CommonJS bundle at `dist/roulette.js`. This is what `bin`/`main` point to and what consumers actually execute.
 - `npm run upload` — bundles then `npm publish --access public`. Requires npm auth. Bump `version` in `package.json` first (see `PUBLISHING.md`).
 
-There is **no test suite and no linter** configured — don't go looking for one or assume a `test`/`lint` script exists. Verification before publishing is a clean `npm run build` (type-check) plus a successful `npm run bundle`. CI (`.github/workflows/build-node.yml`) only runs `npm ci` + `npm run build` on Node 20.x; Node is pinned to 20.11.0 (`.node-version`).
+- `npm run smoke` — bundles, then runs `scripts/smoke-test.mjs`: it executes `dist/roulette.js` against stub Slack and GitLab servers on loopback and asserts on the comment it posts (author excluded, holiday reviewers excluded, one maintainer plus one other developer named) and on the create/no-op/replace behaviour for an existing note. No credentials or network access needed. Because it drives the bundle over real HTTP, it catches runtime breakage from dependency bumps that `tsc` passes clean.
+
+There is **no unit-test framework and no linter** configured — don't go looking for one or assume a `test`/`lint` script exists. Verification before publishing is `npm run tsc` (type-check) plus `npm run smoke`. CI (`.github/workflows/build-node.yml`) runs all three on the Node version in `.node-version` (pinned to 20.11.0).
+
+Merging to `main` needs a pull request with a passing `build` check and one approving review, all enforced by repository rulesets. Dependency bumps are merged by hand; the point of the smoke test is that a green Build is enough to judge one on, without running the tool against real Slack and GitLab first.
 
 ## Runtime Configuration (environment variables)
 
