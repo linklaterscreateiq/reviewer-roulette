@@ -38,9 +38,10 @@ const notesPath = `/gitlab/api/v4/projects/${PROJECT_ID}/merge_requests/${MERGE_
 
 /**
  * @param {object[]} existingNotes notes the stub GitLab returns from the GET
+ * @param {object[]} slackMembers members the stub Slack returns from users.list
  * @returns {Promise<{requests: {method: string, path: string, body: string|null}[], close: () => Promise<void>, port: number}>}
  */
-const startStubServer = async existingNotes => {
+const startStubServer = async (existingNotes, slackMembers) => {
     const requests = []
 
     const server = createServer((req, res) => {
@@ -54,7 +55,7 @@ const startStubServer = async existingNotes => {
 
         if (url.pathname === '/slack/users.list') {
             req.resume()
-            return respond({ ok: true, members: SLACK_MEMBERS })
+            return respond({ ok: true, members: slackMembers })
         }
 
         if (url.pathname === notesPath) {
@@ -87,9 +88,10 @@ const startStubServer = async existingNotes => {
  * @param {object} options
  * @param {object[]} options.existingNotes notes already on the stub merge request
  * @param {string} options.configPath path to the reviewer JSON fixture
+ * @param {object[]} [options.slackMembers] members the stub Slack returns from users.list
  */
-const runRoulette = async ({ existingNotes, configPath }) => {
-    const stub = await startStubServer(existingNotes)
+const runRoulette = async ({ existingNotes, configPath, slackMembers = SLACK_MEMBERS }) => {
+    const stub = await startStubServer(existingNotes, slackMembers)
     const baseUrl = `http://127.0.0.1:${stub.port}`
 
     try {
@@ -172,6 +174,96 @@ const main = async () => {
         check('the merge request author is excluded', !body.includes('Ada Author'), body)
         check('the reviewer on holiday is excluded', !body.includes('Grace Onholiday'), body)
         check('the job URL is linked', body.includes('https://gitlab.example.com/job/1'))
+        check('the comment explains the away rule', body.includes('marks them as out of office'), body)
+    }
+
+    console.log("\nexcludes reviewers using each of Slack's away emoji")
+    {
+        const awayEmojis = [
+            // "Out of Office" category
+            'at-the-beach',
+            'catching-up',
+            'computer-sleep',
+            'out-of-office',
+            'pto-soon',
+            'relaxing',
+            'sleeping-potato',
+            'touch-grass',
+            'travel-time',
+            // "Hybrid Work" and "Remote Work" categories
+            'ooo',
+            'pto',
+            'self-care',
+            'away',
+        ]
+
+        for (const emoji of awayEmojis) {
+            const slackMembers = [
+                { id: 'U_ADA', profile: { status_emoji: '' } },
+                { id: 'U_GRACE', profile: { status_emoji: `:${emoji}:` } },
+                { id: 'U_LINUS', profile: { status_emoji: ':coffee:' } },
+                { id: 'U_BARBARA', profile: { status_emoji: '' } },
+            ]
+            const { requests } = await runRoulette({ existingNotes: [], configPath, slackMembers })
+            const posted = requests.filter(r => r.method === 'POST' && r.path.startsWith(notesPath))
+            const body = posted.length === 1 ? decodeURIComponent(posted[0].body ?? '') : ''
+
+            check(`:${emoji}: excludes the reviewer`, !body.includes('Grace Onholiday') && body.includes('Linus Maintainer'), body)
+        }
+    }
+
+    console.log("\nexcludes a reviewer using Slack's own out of office status")
+    {
+        const slackMembers = [
+            { id: 'U_ADA', profile: { status_emoji: '' } },
+            { id: 'U_GRACE', profile: { status_emoji: ':no_entry:' } },
+            { id: 'U_LINUS', profile: { status_emoji: ':coffee:' } },
+            { id: 'U_BARBARA', profile: { status_emoji: '' } },
+        ]
+        const { exitCode, requests } = await runRoulette({ existingNotes: [], configPath, slackMembers })
+        const posted = requests.filter(r => r.method === 'POST' && r.path.startsWith(notesPath))
+        const body = posted.length === 1 ? decodeURIComponent(posted[0].body ?? '') : ''
+
+        check('the CLI exits successfully', exitCode === 0)
+        check('the out of office reviewer is excluded', !body.includes('Grace Onholiday'), body)
+        check('the available maintainer is named', body.includes('Linus Maintainer'), body)
+    }
+
+    console.log('\nexcludes a reviewer whose away status is a workspace emoji alias')
+    {
+        const slackMembers = [
+            { id: 'U_ADA', profile: { status_emoji: '' } },
+            {
+                id: 'U_GRACE',
+                profile: {
+                    status_emoji: ':annual-leave:',
+                    status_emoji_display_info: [{ emoji_name: 'palm_tree', display_alias: ':annual-leave:' }],
+                },
+            },
+            { id: 'U_LINUS', profile: { status_emoji: ':coffee:' } },
+            { id: 'U_BARBARA', profile: { status_emoji: '' } },
+        ]
+        const { exitCode, requests } = await runRoulette({ existingNotes: [], configPath, slackMembers })
+        const posted = requests.filter(r => r.method === 'POST' && r.path.startsWith(notesPath))
+        const body = posted.length === 1 ? decodeURIComponent(posted[0].body ?? '') : ''
+
+        check('the CLI exits successfully', exitCode === 0)
+        check('the aliased away reviewer is excluded', !body.includes('Grace Onholiday'), body)
+        check('the available maintainer is named', body.includes('Linus Maintainer'), body)
+    }
+
+    console.log('\nuses the away emojis from the reviewer config in place of the defaults')
+    {
+        const customConfigPath = path.join(fixtureDir, 'reviewers-custom-away.json')
+        await writeFile(customConfigPath, JSON.stringify({ ...REVIEWERS, awayEmojis: [':coffee:'] }))
+
+        const { exitCode, requests } = await runRoulette({ existingNotes: [], configPath: customConfigPath })
+        const posted = requests.filter(r => r.method === 'POST' && r.path.startsWith(notesPath))
+        const body = posted.length === 1 ? decodeURIComponent(posted[0].body ?? '') : ''
+
+        check('the CLI exits successfully', exitCode === 0)
+        check('the reviewer using the configured away emoji is excluded', !body.includes('Linus Maintainer'), body)
+        check('a default away emoji no longer excludes anyone', body.includes('Grace Onholiday'), body)
     }
 
     console.log('\nleaves an existing comment alone when a re-roll was not requested')

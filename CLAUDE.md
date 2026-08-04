@@ -16,7 +16,7 @@ The end-to-end flow inside `runReviewRoulette()` is the part worth understanding
 2. Load the reviewer roster from the JSON file at `REVIEWER_CONFIG`.
 3. Drop the MR author from the pool (matched by `GITLAB_USER_ID` vs each reviewer's `userId`).
 4. Apply per-reviewer `selectionChance` (`selectReviewersBasedOnChance`) — a probabilistic filter that is *bypassed entirely* if it would leave fewer than one maintainer or one contributor.
-5. Remove anyone whose Slack `status_emoji` marks them as on holiday/sick (`filterReviewersBasedOnSlackHoliday`).
+5. Remove anyone whose Slack status marks them as away (`filterReviewersWhoAreAway`).
 6. Split the survivors by role, pick a random `maintainer`, then pick a second reviewer from the whole remaining pool excluding that maintainer.
 7. Build a Markdown comment body and reconcile it with GitLab via the Notes API.
 
@@ -65,11 +65,32 @@ The JSON file at `REVIEWER_CONFIG`:
       "selectionChance": 80,
       "roles": ["maintainer", "contributor"]
     }
-  ]
+  ],
+  "awayEmojis": [":palm_tree:", ":no_entry:"]
 }
 ```
-`roles` is an array of `"maintainer"` and/or `"contributor"`. `selectionChance` is an optional 0–100 percentage; omit it to always include the reviewer. A reviewer can hold both roles.
+`roles` is an array of `"maintainer"` and/or `"contributor"`. `selectionChance` is an optional 0–100 percentage; omit it to always include the reviewer. A reviewer can hold both roles. `awayEmojis` is optional and replaces the built-in away set (see below); omit it to use the defaults.
 
-## Holiday/Sick Detection
+## Away Detection
 
-A reviewer is filtered out when their Slack profile `status_emoji` is `:palm_tree:`, `:holiday:`, `:face_with_thermometer:`, or `:hospital:`. Matching is exact-string against the Slack emoji name, so the literals in `filterReviewersBasedOnSlackHoliday` must match Slack precisely (including surrounding colons).
+A reviewer is filtered out when their Slack status uses one of the away emoji, listed in `defaultAwayEmojis` in `src/roulette.ts` and overridable per-project (see below).
+
+**The list is hardcoded because Slack offers no way to read it.** Don't spend time looking for one — this was checked against the live API, not inferred:
+- There is no `is_ooo` or away flag on the user object, and no endpoint returning a workspace's status suggestions.
+- `emoji.list` with `include_categories: true` (scope `emoji:read`) returns **only the nine Unicode groups** — `Smileys & People`, `Component`, `Animals & Nature`, `Food & Drink`, `Travel & Places`, `Activities`, `Objects`, `Symbols`, `Flags`. The emoji picker's "Out of Office" section is **not** among them; it is client-side only.
+- The Out of Office emoji do appear in that response's `emoji` map, but as ordinary workspace custom emoji among ~1,600 others, with nothing marking them as out-of-office. (They happen to share two `emoji.slack-edge.com` batch hashes, but recovering the set that way needs the names first, so it cannot bootstrap the list.)
+
+`defaultAwayEmojis` is therefore copied by hand, from three sources:
+- Slack's **Out of Office** category in full: `at-the-beach`, `catching-up`, `computer-sleep`, `out-of-office`, `pto-soon`, `relaxing`, `sleeping-potato`, `touch-grass`, `travel-time`.
+- The away members of Slack's **Hybrid Work** and **Remote Work** categories: `ooo`, `pto`, `self-care`, `away`. Deliberately partial — the rest of those categories are still-working statuses (`working-from-home`, `hot-desking`, `commuting`, `here`, `virtual-meeting`) that must not exclude anyone.
+- Statuses that predate all of it: `palm_tree`, `holiday`, `desert_island`, `face_with_thermometer`, `hospital`, `no_entry`. `no_entry` is what Slack's built-in out-of-office status sets, including when synced from Google or Outlook Calendar.
+
+If Slack changes these categories the list has to be updated to match — the smoke test pins every name, so a stale entry is at least visible.
+
+A config file may override the whole set with a top-level `awayEmojis` array; it **replaces** the defaults rather than adding to them.
+
+Two normalisation rules matter when changing this:
+- Names are compared bare, so config and profile values may be written with or without colons, and a skin-tone suffix (`:wave::skin-tone-2:`) is stripped.
+- A workspace emoji alias means `profile.status_emoji` can be a name the set does not contain while `profile.status_emoji_display_info[].emoji_name` holds the one it does, so every name Slack reports for the status is matched.
+
+The generated MR comment describes the rule rather than listing the emoji: most of the set is Slack custom emoji, which GitLab renders as literal `:name:` text.
