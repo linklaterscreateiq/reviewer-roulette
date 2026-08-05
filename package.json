@@ -22,6 +22,14 @@
   "keywords": [],
   "author": "Linklaters CreateiQ",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/linklaterscreateiq/reviewer-roulette.git"
+  },
+  "bugs": {
+    "url": "https://github.com/linklaterscreateiq/reviewer-roulette/issues"
+  },
+  "homepage": "https://github.com/linklaterscreateiq/reviewer-roulette#readme",
   "dependencies": {
     "@slack/web-api": "8.0.0",
     "undici": "8.10.0"
