@@ -9,7 +9,7 @@
 import { type UsersListResponse, WebClient, type WebClientOptions } from '@slack/web-api'
 import type { Member } from '@slack/web-api/dist/types/response/UsersListResponse'
 import fs from 'node:fs/promises'
-import { HttpsProxyAgent } from 'https-proxy-agent'
+import { ProxyAgent, fetch as undiciFetch } from 'undici'
 
 type Role = 'maintainer' | 'contributor'
 
@@ -84,10 +84,23 @@ const config = {
 }
 // End Config
 
+// Slack's client dropped its `agent` option when it moved from axios to fetch, so
+// proxying now means handing it a fetch that dispatches through the proxy.
+const proxiedFetch = (proxyUrl: string): WebClientOptions['fetch'] => {
+    const dispatcher = new ProxyAgent(proxyUrl)
+
+    // undici and the global fetch declare structurally identical but nominally
+    // distinct FormData, so init has to be re-asserted across the boundary.
+    return (url, init) =>
+        undiciFetch(url, { ...init, dispatcher } as unknown as Parameters<typeof undiciFetch>[1]) as ReturnType<
+            NonNullable<WebClientOptions['fetch']>
+        >
+}
+
 const getAllSlackUsers = async () => {
     const maybeHttpsProxy = process.env.HTTPS_PROXY
     const clientOpts: WebClientOptions = {
-        ...(maybeHttpsProxy ? { agent: new HttpsProxyAgent(maybeHttpsProxy) } : {}),
+        ...(maybeHttpsProxy ? { fetch: proxiedFetch(maybeHttpsProxy) } : {}),
         ...(process.env.SLACK_API_URL ? { slackApiUrl: process.env.SLACK_API_URL } : {}),
     }
 
