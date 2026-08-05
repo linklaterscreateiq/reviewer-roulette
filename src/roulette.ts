@@ -315,11 +315,19 @@ How do I review / What do I do if I've been named as a reviewer? An official gui
         ? `${gitlabApiUrl}/api/v4/projects/${ciProjectId}/merge_requests/${ciMergeRequestIId}/notes/${previousNote.id}`
         : `${gitlabApiUrl}/api/v4/projects/${ciProjectId}/merge_requests/${ciMergeRequestIId}/notes`
 
-      fetch(`${urlPrefix}?body=${urlEncodedBody}`, { headers: gitlabAuthHeaders, method: method })
-        .then(response => response.json())
-        .then((jsonData: NoteResponse) => {
-          console.log(`${actionPastTense} new comment id = ${jsonData.id}`)
-        })
+      const writeResponse = await fetch(`${urlPrefix}?body=${urlEncodedBody}`, {
+        headers: gitlabAuthHeaders,
+        method: method,
+      })
+
+      if (!writeResponse.ok) {
+        console.error(`GitLab API error: ${writeResponse.status} ${writeResponse.statusText}`)
+        console.error(`Failed to ${method} the reviewer note. No reviewers have been requested.`)
+        process.exit(1)
+      }
+
+      const jsonData: NoteResponse = await writeResponse.json()
+      console.log(`${actionPastTense} comment id = ${jsonData.id}`)
     }
 
     await createOrUpdateNote(!!previousNote && replaceNote)
