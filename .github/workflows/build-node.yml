@@ -7,8 +7,10 @@ name: Build
 on:
   push:
     branches: [ "main" ]
+  # Every pull request, not only those targeting main, so that one stacked on
+  # another is checked too. Leaving push filtered to main keeps that to one run
+  # per commit rather than two.
   pull_request:
-    branches: [ "main" ]
 
 permissions:
   contents: read
