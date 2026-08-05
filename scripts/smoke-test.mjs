@@ -53,17 +53,20 @@ const notesPath = `/gitlab/api/v4/projects/${PROJECT_ID}/merge_requests/${MERGE_
  * @param {object[]} slackMembers members the stub Slack returns from users.list
  * @returns {Promise<{requests: {method: string, path: string, body: string|null}[], close: () => Promise<void>, port: number}>}
  */
-const startStubServer = async (existingNotes, slackMembers) => {
+const startStubServer = async (existingNotes, slackMembers, noteWriteStatus = 200) => {
   const requests = []
 
   const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1')
     requests.push({ method: req.method, path: url.pathname, body: url.searchParams.get('body') })
 
-    const respond = payload => {
-      res.writeHead(200, { 'content-type': 'application/json' })
+    const respond = (payload, status = 200) => {
+      res.writeHead(status, { 'content-type': 'application/json' })
       res.end(JSON.stringify(payload))
     }
+
+    const respondToWrite = () =>
+      noteWriteStatus === 200 ? respond({ id: 'stub-note-id' }) : respond({ message: '403 Forbidden' }, noteWriteStatus)
 
     if (url.pathname === '/slack/users.list') {
       req.resume()
@@ -73,12 +76,12 @@ const startStubServer = async (existingNotes, slackMembers) => {
     if (url.pathname === notesPath) {
       req.resume()
       if (req.method === 'GET') return respond(existingNotes)
-      return respond({ id: 'stub-note-id' })
+      return respondToWrite()
     }
 
     if (url.pathname.startsWith(notesPath)) {
       req.resume()
-      return respond({ id: 'stub-note-id' })
+      return respondToWrite()
     }
 
     req.resume()
@@ -101,9 +104,17 @@ const startStubServer = async (existingNotes, slackMembers) => {
  * @param {object[]} options.existingNotes notes already on the stub merge request
  * @param {string} options.configPath path to the reviewer JSON fixture
  * @param {object[]} [options.slackMembers] members the stub Slack returns from users.list
+ * @param {string[]} [options.omitEnv] environment variables to leave unset
+ * @param {number} [options.noteWriteStatus] status the stub GitLab returns from the POST/PUT
  */
-const runRoulette = async ({ existingNotes, configPath, slackMembers = SLACK_MEMBERS, omitEnv = [] }) => {
-  const stub = await startStubServer(existingNotes, slackMembers)
+const runRoulette = async ({
+  existingNotes,
+  configPath,
+  slackMembers = SLACK_MEMBERS,
+  omitEnv = [],
+  noteWriteStatus = 200,
+}) => {
+  const stub = await startStubServer(existingNotes, slackMembers, noteWriteStatus)
   const baseUrl = `http://127.0.0.1:${stub.port}`
 
   try {
@@ -142,9 +153,6 @@ const runRoulette = async ({ existingNotes, configPath, slackMembers = SLACK_MEM
         reject(new Error('Timed out after 30s waiting for the CLI to exit'))
       }, 30_000).unref()
     })
-
-    // The CLI does not await its final write, so give the socket a tick to land.
-    await new Promise(resolve => setTimeout(resolve, 250))
 
     return { exitCode, stdout, stderr, requests: stub.requests }
   } finally {
@@ -299,6 +307,16 @@ const main = async () => {
     check('the CLI exits with a failure code', exitCode !== 0, `exit=${exitCode}\n${output}`)
     check('it names the variable that is missing', output.includes('REVIEWER_BOT_USERNAME'), output)
     check('it does not write to the merge request', writes.length === 0, `wrote ${writes.length} time(s)`)
+  }
+
+  console.log('\nfails loudly when GitLab rejects the note it tries to post')
+  {
+    const { exitCode, stdout, stderr } = await runRoulette({ existingNotes: [], configPath, noteWriteStatus: 403 })
+    const output = `${stdout}${stderr}`
+
+    check('the CLI exits with a failure code', exitCode !== 0, `exit=${exitCode}\n${output}`)
+    check('it says GitLab rejected the write', output.includes('403'), output)
+    check('it does not report a comment id', !output.includes('comment id ='), output)
   }
 
   console.log('\nleaves an existing comment alone when a re-roll was not requested')
