@@ -31,6 +31,8 @@ jobs:
         key: npm-${{ hashFiles('package-lock.json') }}
         restore-keys: npm-
     - run: npm ci
+    - name: Lint
+      run: npm run lint
     - name: Type-check
       run: npm run tsc
     - name: Bundle
