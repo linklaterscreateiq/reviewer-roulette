@@ -1,0 +1,54 @@
+# Publishes @createiq/reviewer-roulette when a GitHub Release is published.
+# Authentication is npm trusted publishing over OIDC, so there is no npm token
+# in this repository's secrets; the package's trusted publisher on npmjs.com
+# must name this workflow file.
+
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write # npm trusted publishing exchanges this for a short-lived token
+
+concurrency:
+  group: publish-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the toolchain from mise.toml
+        uses: jdx/mise-action@v4
+      # Only for the registry it writes into .npmrc — the Node on PATH is mise's.
+      - uses: actions/setup-node@v7
+        with:
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm ci
+
+      - name: Check the tag matches the version being published
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          if [ "${TAG#v}" != "$version" ]; then
+            echo "Release tag $TAG does not name package.json version $version." >&2
+            echo "Bump the version on main and recreate the release." >&2
+            exit 1
+          fi
+
+      - name: Type-check
+        run: npm run tsc
+      # Bundles, then drives dist/roulette.js against stub Slack and GitLab
+      # servers. The bundle it proves is the one npm publish then uploads.
+      - name: Smoke test
+        run: npm run smoke
+
+      - name: Publish
+        run: npm publish --provenance --access public
