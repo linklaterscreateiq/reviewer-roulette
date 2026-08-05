@@ -20,11 +20,14 @@ jobs:
 
     steps:
     - uses: actions/checkout@v7
-    - name: Use Node.js from .node-version
-      uses: actions/setup-node@v7
+    - name: Install the toolchain from mise.toml
+      uses: jdx/mise-action@v4
+    - name: Cache npm downloads
+      uses: actions/cache@v6
       with:
-        node-version-file: .node-version
-        cache: 'npm'
+        path: ~/.npm
+        key: npm-${{ hashFiles('package-lock.json') }}
+        restore-keys: npm-
     - run: npm ci
     - name: Type-check
       run: npm run tsc
