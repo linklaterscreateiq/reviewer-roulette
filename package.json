@@ -10,10 +10,11 @@
     "build": "npm run tsc",
     "tsc": "tsc -p tsconfig.json",
     "bundle": "tsdown",
-    "smoke": "npm run bundle && node scripts/smoke-test.mjs",
+    "smoke": "npm run bundle && vitest run",
     "upload": "npm run bundle && npm publish --access public",
     "lint": "biome ci --error-on-warnings .",
-    "format": "biome check --write ."
+    "format": "biome check --write .",
+    "test": "vitest"
   },
   "files": [
     "dist"
@@ -29,6 +30,7 @@
     "@biomejs/biome": "2.5.7",
     "@types/node": "24.13.3",
     "tsdown": "0.22.14",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
   }
 }
